@@ -110,48 +110,58 @@ function updateQuestStatus(quest /* or quest.id */) {
 function populateQuestTodos(quest) {
     const questTodos = todos.filter(todo => todo.questID == quest.id)
     if (!quest.progress && !questTodos.length) {
-        const date = new Date(quest.from)
-        date.setDate(date.getDate() - 1) 
-        const yesterdayTodos = todos.filter(todo => todo.date == dateToISO(date) && todo.status == 'done')
-        const lastTodo = yesterdayTodos.find(todo => {
-            const q = quests.find(quest => quest.id == todo.questID) 
-            return quest.activityID == q.activityID
-        })
-        const n = lastTodo?.n || 0
-        for (let i = 0; i < quest.total; i++) {
-            const date = new Date(quest.from)
-            if (!i) {
-                const activityQuestsIDs = quests.filter(q => q.activityID == quest.activityID)
-                    .map(quest => quest.id)
-                const inertiaTodo = todos.findIndex(todo => todo.date == dateToISO(date) &&
-                    activityQuestsIDs.includes(todo.questID) && todo.status == 'planned')
-                if (inertiaTodo !== -1) todos.splice(inertiaTodo, 1)
-            }
-            date.setDate(date.getDate() + i)
-
-            const newTodo = {
-                id: newID(),
-                questID: quest.id,
-                date: dateToISO(date),
-                confidence: Math.floor((i+1)**0.5),
-                status: 'planned',
-                n: i + n + 1,
-            }
-            todos.push(newTodo)
-        }
-        localStorage.todos = JSON.stringify(todos)
+        addNewTodos(quest)
     } else if (quest.status == 'done' && questTodos.every(todo => todo.status == 'done')) {
-        const lastTodo = questTodos[questTodos.length - 1]
-        const date = new Date(lastTodo.date)
-        date.setDate(date.getDate() + 1)
-        const newTodo = {...lastTodo, id: newID(), date: dateToISO(date), status: 'planned'}
-        todos.push(newTodo)
-        if (newTodo.date < dateToISO(new Date)) {
-            overdueTodos.push(newTodo)
-            overdueTodos.sort((a, b) => a.date < b.date ? -1 : 1)
-            groupedOverdueTodos[newTodo.date] = 
-                [...groupedOverdueTodos[newTodo.date] || [], newTodo]
-        }
-        localStorage.todos = JSON.stringify(todos)
+        continueInertia(questTodos)
     }
+}
+
+function addNewTodos(quest) {
+    const diff = quest.confidence/quest.total
+    const date = new Date(quest.from)
+    date.setDate(date.getDate() - 1)
+    const yesterdayTodos = todos.filter(todo => todo.date == dateToISO(date) && todo.status == 'done')
+    const lastTodo = yesterdayTodos.find(todo => {
+        const q = quests.find(quest => quest.id == todo.questID)
+        return quest.activityID == q.activityID
+    })
+    const n = lastTodo?.n || 0
+    for (let i = 0; i < quest.total; i++) {
+        const date = new Date(quest.from)
+        if (!i) {
+            const activityQuestsIDs = quests.filter(q => q.activityID == quest.activityID)
+                .map(quest => quest.id)
+            const inertiaTodo = todos.findIndex(todo => todo.date == dateToISO(date) &&
+                activityQuestsIDs.includes(todo.questID) && todo.status == 'planned')
+            if (inertiaTodo !== -1)
+                todos.splice(inertiaTodo, 1)
+        }
+        date.setDate(date.getDate() + i)
+
+        const newTodo = {
+            id: newID(),
+            questID: quest.id,
+            date: dateToISO(date),
+            confidence: Math.min(diff, Math.floor((i + n + 1) ** 0.5)),
+            status: 'planned',
+            n: i + n + 1,
+        }
+        todos.push(newTodo)
+    }
+    localStorage.todos = JSON.stringify(todos)
+}
+
+function continueInertia(questTodos) {
+    const lastTodo = questTodos[questTodos.length - 1]
+    const date = new Date(lastTodo.date)
+    date.setDate(date.getDate() + 1)
+    const newTodo = { ...lastTodo, id: newID(), date: dateToISO(date), status: 'planned' }
+    todos.push(newTodo)
+    if (newTodo.date < dateToISO(new Date)) {
+        overdueTodos.push(newTodo)
+        overdueTodos.sort((a, b) => a.date < b.date ? -1 : 1)
+        groupedOverdueTodos[newTodo.date] =
+            [...groupedOverdueTodos[newTodo.date] || [], newTodo]
+    }
+    localStorage.todos = JSON.stringify(todos)
 }
